@@ -17,10 +17,16 @@ from __future__ import annotations
 
 import json
 import os
+import re
+from dataclasses import dataclass
 from pathlib import Path
 
 from langchain_core.documents import Document
 from langchain_text_splitters import MarkdownHeaderTextSplitter
+from pydantic import BaseModel, Field
+
+from src.llm import build_llm
+from src.schemas import RetrievedDoc
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
@@ -159,6 +165,220 @@ def index_documents(vectorstore=None, docs: list[Document] | None = None) -> int
     return len(docs)
 
 
+# ── 토크나이저 (BM25용) ────────────────────────────────────────────────────
+
+_kiwi = None
+
+
+def _get_kiwi():
+    """Kiwi 인스턴스는 생성이 느려 한 번만 만들어 재사용한다."""
+    global _kiwi
+    if _kiwi is None:
+        from kiwipiepy import Kiwi
+
+        _kiwi = Kiwi()
+    return _kiwi
+
+
+def tokenize(text: str) -> list[str]:
+    """구두점 분리 토큰과 kiwi 형태소의 합집합을 돌려준다.
+
+    둘 중 하나만 쓰면 각각 다음과 같이 실패한다(실측):
+      - 구두점 분리만: '주민' 질의가 문서의 '주민입니다' 와 안 맞는다(조사 미분리).
+      - kiwi 만: '1호' 가 '1' + '호' 로 쪼개져 흔한 토큰에 묻힌다.
+    합집합으로 두 경우를 모두 살린다. 문서가 128건뿐이라 색인 비용은 무시할 수준.
+    """
+    surface = [w for w in re.split(r"[^0-9A-Za-z가-힣]+", text.lower()) if w]
+    morphs = [t.form.lower() for t in _get_kiwi().tokenize(text) if len(t.form) > 1]
+    return list(dict.fromkeys(surface + morphs))
+
+
+# ── 3단계 검색 ─────────────────────────────────────────────────────────────
+
+RRF_K = 60           # RRF 상수. 관행값 60을 그대로 쓴다.
+MIN_RELEVANCE = 4    # 리랭커 점수(0~10) 하한. 미만이면 '관련 문서 없음' 취급.
+
+
+class _Variants(BaseModel):
+    """쿼리 확장 결과."""
+
+    queries: list[str] = Field(description="원 질의와 뜻이 같은 검색어 2개")
+
+
+class _Ranked(BaseModel):
+    """리랭킹 결과 한 건."""
+
+    doc_id: str
+    score: int = Field(description="질의와의 관련도 0~10. 무관하면 0")
+
+
+class _RankedList(BaseModel):
+    results: list[_Ranked]
+
+
+@dataclass
+class SearchResult:
+    """검색 결과와 그 과정. 호출자가 trace 를 만들 수 있도록 과정을 함께 돌려준다."""
+
+    docs: list[RetrievedDoc]
+    expanded: list[str]     # 실제로 검색에 쓴 질의들
+    retried: bool = False   # 빈 결과로 쿼리를 재작성해 재시도했는가
+
+
+class AcnhRetriever:
+    """쿼리 확장 → 하이브리드 검색 → 리랭킹의 3단계 파이프라인."""
+
+    def __init__(self, vectorstore, docs: list[Document], llm=None,
+                 use_expansion: bool = True, use_rerank: bool = True):
+        self.vs = vectorstore
+        self.docs = docs
+        self.llm = llm
+        self.use_expansion = use_expansion
+        self.use_rerank = use_rerank
+
+        from rank_bm25 import BM25Okapi
+
+        self._bm25 = BM25Okapi([tokenize(d.page_content) for d in docs])
+        self._by_id = {d.metadata["doc_id"]: d for d in docs}
+
+    # ── 1단계: 쿼리 확장 ──
+    def expand(self, query: str) -> list[str]:
+        """원 질의에 같은 뜻의 검색어 2개를 더한다."""
+        if not self.use_expansion or self.llm is None:
+            return [query]
+        prompt = (
+            "너는 '모여봐요 동물의 숲' 도감 검색기의 질의 확장기다.\n"
+            "아래 질문과 같은 것을 찾는 검색어 2개를 만들어라. "
+            "고유명사(주민 이름·생물 이름)는 절대 바꾸거나 빼지 말고 그대로 남겨라.\n\n"
+            f"질문: {query}"
+        )
+        try:
+            out = self.llm.with_structured_output(_Variants).invoke(prompt)
+            return list(dict.fromkeys([query, *out.queries]))
+        except Exception:
+            return [query]  # 확장 실패는 치명적이지 않다. 원 질의로 진행.
+
+    # ── 2단계: 하이브리드 검색 (BM25 + 임베딩, RRF 융합) ──
+    def hybrid(self, queries: list[str], doc_type: str | None = None,
+               k: int = 10) -> list[tuple[Document, float]]:
+        """각 질의로 두 방식을 돌리고 RRF 로 순위를 합친다.
+
+        점수 체계가 다른 두 랭킹(거리 vs BM25 점수)을 직접 더할 수 없으므로,
+        순위만 쓰는 RRF 로 융합한다.
+        """
+        fused: dict[str, float] = {}
+
+        def add(ranked_ids: list[str]) -> None:
+            for rank, doc_id in enumerate(ranked_ids):
+                fused[doc_id] = fused.get(doc_id, 0.0) + 1.0 / (RRF_K + rank)
+
+        flt = {"doc_type": doc_type} if doc_type else None
+        for q in queries:
+            hits = self.vs.similarity_search(q, k=k, filter=flt)
+            add([h.metadata["doc_id"] for h in hits])
+
+            scores = self._bm25.get_scores(tokenize(q))
+            pairs = [
+                (self.docs[i].metadata["doc_id"], s)
+                for i, s in enumerate(scores)
+                if s > 0 and (not doc_type or self.docs[i].metadata["doc_type"] == doc_type)
+            ]
+            pairs.sort(key=lambda x: -x[1])
+            add([doc_id for doc_id, _ in pairs[:k]])
+
+        ordered = sorted(fused.items(), key=lambda x: -x[1])[:k]
+        return [(self._by_id[doc_id], score) for doc_id, score in ordered]
+
+    # ── 3단계: 리랭킹 (관련도 필터 겸함) ──
+    def rerank(self, query: str, candidates: list[tuple[Document, float]],
+               top_n: int) -> list[RetrievedDoc]:
+        """LLM 이 후보에 관련도를 매겨 재정렬하고, 하한 미만은 버린다.
+
+        단순 재정렬이 아니라 '관련 문서 없음'을 판정하는 역할도 한다.
+        도감에 없는 생물·주민을 물었을 때 무관한 문서가 딸려와 환각의 근거가
+        되는 것을 여기서 막는다(SERVICE.md 정책 2).
+        """
+        if not candidates:
+            return []
+        if not self.use_rerank or self.llm is None:
+            return [
+                RetrievedDoc(doc_id=d.metadata["doc_id"], text=d.page_content,
+                             score=s, doc_type=d.metadata["doc_type"])
+                for d, s in candidates[:top_n]
+            ]
+
+        listing = "\n".join(f"[{d.metadata['doc_id']}] {d.page_content}" for d, _ in candidates)
+        prompt = (
+            "아래 문서들이 질문에 답하는 데 실제로 쓸모 있는지 0~10으로 채점하라.\n"
+            "질문이 묻는 대상이 문서에 없으면 주저 없이 0점을 줘라. "
+            "억지로 높은 점수를 주지 마라.\n\n"
+            f"질문: {query}\n\n문서:\n{listing}"
+        )
+        try:
+            out = self.llm.with_structured_output(_RankedList).invoke(prompt)
+        except Exception:
+            out = None
+        if out is None:
+            return [
+                RetrievedDoc(doc_id=d.metadata["doc_id"], text=d.page_content,
+                             score=s, doc_type=d.metadata["doc_type"])
+                for d, s in candidates[:top_n]
+            ]
+
+        kept = sorted(
+            (r for r in out.results if r.score >= MIN_RELEVANCE and r.doc_id in self._by_id),
+            key=lambda r: -r.score,
+        )[:top_n]
+        return [
+            RetrievedDoc(
+                doc_id=r.doc_id,
+                text=self._by_id[r.doc_id].page_content,
+                score=float(r.score),
+                doc_type=self._by_id[r.doc_id].metadata["doc_type"],
+            )
+            for r in kept
+        ]
+
+    # ── 전체 파이프라인 + 재시도 미들웨어 ──
+    def search(self, query: str, doc_type: str | None = None, k: int = 5) -> SearchResult:
+        """3단계를 모두 태우고, 빈 결과면 쿼리를 재작성해 1회만 재시도한다.
+
+        두 번째도 비면 빈 목록을 그대로 돌려준다. 호출자는 지어내지 말고
+        '확인되지 않는다'로 안내해야 한다(정책 2).
+        """
+        variants = self.expand(query)
+        docs = self.rerank(query, self.hybrid(variants, doc_type), k)
+        if docs:
+            return SearchResult(docs=docs, expanded=variants)
+
+        rewritten = self._rewrite(query)
+        if rewritten == query:
+            return SearchResult(docs=[], expanded=variants, retried=False)
+        docs = self.rerank(rewritten, self.hybrid([rewritten], doc_type), k)
+        return SearchResult(docs=docs, expanded=variants + [rewritten], retried=True)
+
+    def _rewrite(self, query: str) -> str:
+        """재시도용으로 질의를 다르게 바꿔 본다."""
+        if self.llm is None:
+            return query
+        try:
+            out = self.llm.with_structured_output(_Variants).invoke(
+                "아래 검색이 결과를 하나도 못 찾았다. 표현을 크게 바꿔 다시 검색할 "
+                "질의를 2개 제안하라. 핵심 명사는 유지하되 설명적으로 풀어써라.\n\n"
+                f"실패한 질의: {query}"
+            )
+            return out.queries[0] if out.queries else query
+        except Exception:
+            return query
+
+
+def build_retriever(vectorstore=None, docs=None, llm=None, **kwargs) -> AcnhRetriever:
+    """검색기를 조립한다. 모든 의존을 주입받을 수 있다."""
+    docs = load_documents() if docs is None else docs
+    vs = build_vectorstore() if vectorstore is None else vectorstore
+    return AcnhRetriever(vs, docs, llm=build_llm(llm), **kwargs)
+
+
 if __name__ == "__main__":
     from collections import Counter
 
@@ -172,4 +392,12 @@ if __name__ == "__main__":
 
     print(f"색인 중... (Chroma: {PERSIST_DIR})")
     n = index_documents(docs=documents)
-    print(f"색인 완료: {n}건")
+    print(f"색인 완료: {n}건\n")
+
+    # 색인이 쓸 만한지 바로 확인한다. LLM 을 끄고 하이브리드 검색만 본다.
+    retriever = build_retriever(docs=documents, llm=None,
+                                use_expansion=False, use_rerank=False)
+    for q, want in [("무당벌레 어디서 잡혀?", "I-031"), ("1호 선물 추천해줘", "V-16")]:
+        hits = retriever.search(q, k=3).docs
+        top = hits[0].doc_id if hits else "없음"
+        print(f"  {'✓' if top == want else '✗'} {q!r} → 1위 {top} (기대 {want})")

@@ -63,12 +63,13 @@ guardrail_in · retrieve · retrieve_retry · tool · generate · guardrail_out
 ```
 mini-pjt/
 ├── src/                        # ⬜ 미착수 · 의존은 아래 순서로만 흐른다(역방향 import 금지)
-│   ├── schemas.py              # 1. 의존 0 — Pydantic 응답 모델 + AgentState TypedDict
-│   ├── guardrails.py           # 2. 의존 0 — 차단 규칙 목록 + 판정 (순수 함수)
-│   ├── retriever.py            # 3. RAG — 쿼리 확장 → 하이브리드(BM25+임베딩) → 리랭킹 + 재시도
-│   ├── tools.py                # 4. 도메인 도구 6개 · build_tools(llm=None, retriever=None)
-│   ├── agent.py                # 5. LangGraph 그래프 · build_graph(llm=None, ...)
-│   └── api.py                  # 6. FastAPI · POST /query
+│   ├── schemas.py              # 1. 의존 0 — Pydantic 응답 모델 + AgentState TypedDict  ✅
+│   ├── llm.py                  # 2. 의존 0 — Bedrock LLM 팩토리 + SQLiteCache          ✅
+│   ├── guardrails.py           # 3. 의존 0 — 차단 규칙 목록 + 판정 (순수 함수)
+│   ├── retriever.py            # 4. RAG — 쿼리 확장 → 하이브리드(BM25+임베딩) → 리랭킹 + 재시도  ✅
+│   ├── tools.py                # 5. 도메인 도구 6개 · build_tools(llm=None, retriever=None)
+│   ├── agent.py                # 6. LangGraph 그래프 · build_graph(llm=None, ...)
+│   └── api.py                  # 7. FastAPI · POST /query
 ├── data/                       # ✅ 완료
 │   ├── make_data.py            #    더미 데이터 생성 스크립트 (단일 생성 지점)
 │   ├── insects.json            #    곤충 50종  (doc_id: I-001~I-050)
