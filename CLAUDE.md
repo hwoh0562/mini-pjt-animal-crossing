@@ -22,7 +22,7 @@
 
 | 항목 | 값 |
 |---|---|
-| LLM | `us.anthropic.claude-sonnet-4-5-20250929-v1:0` (Amazon Bedrock) |
+| LLM | `anthropic.claude-sonnet-4-5-20250929-v1:0` (Amazon Bedrock) — 추론 프로파일 접두사는 `.env` 의 `BEDROCK_MODEL_ID` 로 주입 |
 | 임베딩 | `amazon.titan-embed-text-v2:0` (1024차원) |
 | 리전 | `us-east-1` |
 | 벡터DB | Chroma · `persist_directory="./chroma_db"` |
@@ -34,6 +34,8 @@
 | 평가 | RAGAS + LLM-as-Judge |
 
 - `collection_name` 은 이 프로젝트 전용으로 `acnh_docs` 를 쓴다. *(⚠️ 고정 스택 항목 중 유일하게 프로젝트에 맞춰 바꾼 값)*
+- **추론 프로파일은 `global.` 을 쓴다.** `us.` 접두사는 일일 토큰 한도가 소진돼 `ThrottlingException` 이 난다. 두 접두사는 **쿼터 풀만 다를 뿐 모델은 동일**하므로 스택 변경이 아니다. 코드에 하드코딩하지 말고 `os.getenv("BEDROCK_MODEL_ID")` 로 읽어, `us.` 한도가 복구되면 `.env` 한 줄로 되돌릴 수 있게 한다.
+- **LLM 응답 캐싱을 켠다.** 질의당 호출이 5~8회라 테스트 20건을 반복하면 `global.` 한도도 닿는다. `langchain_community.cache.SQLiteCache` 를 `set_llm_cache()` 로 걸어두면 같은 세트 재실행 시 호출이 0회가 된다.
 - 이 저장소는 미니 PJT 전용이다. **day 폴더나 채점기 디렉터리를 만들지 말 것.**
 
 ### API 응답 규약 (산출물 규약 §4-2 · 변경 금지)
