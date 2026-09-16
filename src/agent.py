@@ -28,13 +28,14 @@ from __future__ import annotations
 import json
 from datetime import datetime
 
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from langgraph.graph import END, START, StateGraph
+from langgraph.types import Command, interrupt
 
 from src.guardrails import check_input, check_output
 from src.llm import build_llm
 from src.schemas import AgentState, Answer, Context, QueryResponse, TraceStep
-from src.tools import build_tools
+from src.tools import DANGEROUS_TOOLS, build_tools, preview_sell_all
 
 SYSTEM_PROMPT = """너는 '모여봐요 동물의 숲' 플레이어를 돕는 섬생활 어시스턴트다.
 
@@ -48,6 +49,14 @@ SYSTEM_PROMPT = """너는 '모여봐요 동물의 숲' 플레이어를 돕는 �
   확정적인 숫자로 답하지 않는다.
 - 조건에 맞는 대상이 없으면 '없다'가 정답이다. 다른 것으로 대신 채우지 마라.
 - 정중한 존댓말로 답한다.
+
+실행 요청을 받았을 때
+- 사용자가 무를 팔아 달라고 하면 sell_all_turnips 를 **곧바로 호출하라.**
+- "정말 파시겠습니까?" 같은 확인 질문을 네가 직접 하지 마라. 위험한 작업에는
+  시스템이 승인 절차를 자동으로 끼워 넣고, 사용자가 승인하기 전에는 아무것도
+  실행되지 않는다. 네가 망설이면 승인 절차 자체가 시작되지 않는다.
+- 다만 매도에 필요한 현재 시세를 사용자가 말하지 않았다면, 도구를 부르지 말고
+  시세를 먼저 물어라.
 
 현재 시각은 {hour}시다. 시각이 필요한 도구에는 이 값을 쓰되, 사용자가 다른
 시각을 말하면 그 값을 우선한다."""
@@ -92,6 +101,23 @@ def build_graph(llm=None, tools=None, store=None, checkpointer=None, now_hour: i
         hour = datetime.now().hour if now_hour is None else now_hour
         return SystemMessage(SYSTEM_PROMPT.format(hour=hour))
 
+    def _approval_preview(calls: list[dict]) -> str:
+        """승인 화면에 보여줄 문구. 실제 매도와 같은 계산을 쓴다."""
+        for call in calls:
+            if call["name"] != "sell_all_turnips":
+                continue
+            try:
+                p = preview_sell_all(store, int(call["args"]["current_price"]))
+            except Exception:
+                break
+            if p["quantity"] <= 0:
+                return "보유한 무가 없어 매도할 것이 없습니다."
+            profit = f" (이익 {p['profit']:,}벨)" if p["profit"] is not None else ""
+            return (f"무 {p['quantity']}개를 개당 {p['current_price']:,}벨에 매도하면 "
+                    f"{p['revenue']:,}벨을 받습니다{profit}. "
+                    f"매도 후 보유 벨은 {p['new_bells']:,}벨이 됩니다. 진행할까요?")
+        return "되돌릴 수 없는 작업입니다. 진행할까요?"
+
     # ── agent: 도구를 고르는 ReAct 루프 ──
     def agent_node(state: AgentState) -> dict:
         response = model_with_tools.invoke([_system_message(), *state["messages"]])
@@ -102,8 +128,29 @@ def build_graph(llm=None, tools=None, store=None, checkpointer=None, now_hour: i
         last = state["messages"][-1]
         messages, contexts, trace = [], [], []
 
+        # 위험 도구가 섞여 있으면 무엇이든 실행하기 전에 먼저 승인을 받는다.
+        # interrupt() 로 멈췄다 재개되면 이 노드가 처음부터 다시 실행되므로,
+        # 승인 판정을 앞에 두어야 조회 도구가 두 번 호출되지 않는다.
+        dangerous = [c for c in last.tool_calls if c["name"] in DANGEROUS_TOOLS]
+        approved = True
+        if dangerous:
+            answer = interrupt({
+                "type": "approval_required",
+                "tools": [c["name"] for c in dangerous],
+                "preview": _approval_preview(dangerous),
+            })
+            approved = answer.get("approved", False) if isinstance(answer, dict) else bool(answer)
+
         for call in last.tool_calls:
             name, args = call["name"], call["args"]
+            if name in DANGEROUS_TOOLS and not approved:
+                messages.append(ToolMessage(
+                    content="사용자가 승인하지 않아 실행하지 않았습니다.",
+                    tool_call_id=call["id"], name=name))
+                trace.append(TraceStep(step="tool", input=f"{name}({_summarize(args, 150)})",
+                                       output="승인 거부 — 미실행"))
+                continue
+
             tool = tools_by_name.get(name)
             if tool is None:
                 result = {"data": {"error": f"알 수 없는 도구입니다: {name}"}, "docs": []}
@@ -218,10 +265,58 @@ def to_response(state: dict) -> QueryResponse:
     )
 
 
+def _interrupt_response(state: dict) -> QueryResponse | None:
+    """승인 대기로 멈춘 상태면 그 안내를 응답으로 만든다.
+
+    interrupt() 는 노드가 끝나기 전에 멈추므로 그 노드의 trace 는 상태에
+    기록되지 않는다. 그래서 '승인 대기' 단계를 여기서 덧붙인다.
+    step 이름은 SERVICE.md 의 6개 어휘를 지켜 'tool' 을 쓴다.
+    """
+    pending = state.get("__interrupt__")
+    if not pending:
+        return None
+    payload = pending[0].value if hasattr(pending[0], "value") else pending[0]
+    message = payload.get("preview", "진행할까요?") if isinstance(payload, dict) else str(payload)
+    tools = ", ".join(payload.get("tools", [])) if isinstance(payload, dict) else ""
+
+    response = to_response(state)
+    response.answer = message
+    response.trace = [*response.trace,
+                      TraceStep(step="tool", input=tools, output="승인 대기 — 미실행")]
+    return response
+
+
+def is_awaiting_approval(graph, config: dict) -> bool:
+    """이 대화가 승인 대기 상태로 멈춰 있는가."""
+    return bool(graph.get_state(config).next)
+
+
 def ask(graph, question: str, config: dict | None = None) -> QueryResponse:
-    """질문 한 건을 실행하고 응답 규약으로 돌려준다."""
+    """질문 한 건을 실행하고 응답 규약으로 돌려준다.
+
+    승인 대기로 멈추면 실행하지 않은 채 확인 문구를 돌려준다.
+    """
     state = graph.invoke({"messages": [HumanMessage(question)]}, config or {})
-    return to_response(state)
+    return _interrupt_response(state) or to_response(state)
+
+
+def resume(graph, approved: bool, config: dict) -> QueryResponse:
+    """승인 대기 상태를 사용자의 결정으로 재개한다."""
+    state = graph.invoke(Command(resume={"approved": approved}), config)
+    return _interrupt_response(state) or to_response(state)
+
+
+def build_checkpointer(path: str = "checkpoints.sqlite"):
+    """SqliteSaver 를 만든다. HITL 은 체크포인터가 없으면 동작하지 않는다.
+
+    from_conn_string 은 컨텍스트 매니저라 서버에서 수명 관리가 번거롭다.
+    커넥션을 직접 넘겨 프로세스가 사는 동안 유지한다.
+    """
+    import sqlite3
+
+    from langgraph.checkpoint.sqlite import SqliteSaver
+
+    return SqliteSaver(sqlite3.connect(path, check_same_thread=False))
 
 
 if __name__ == "__main__":

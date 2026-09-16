@@ -248,9 +248,12 @@ def build_tools(llm=None, retriever=None, store=None) -> list:
     def sell_all_turnips(current_price: int) -> dict:
         """보유한 무를 전량 매도 처리하고 플레이어 상태를 갱신한다.
 
-        되돌릴 수 없는 작업이라 반드시 사용자 승인을 받은 뒤에만 실행된다.
-        승인 절차는 그래프가 처리하므로, 사용자가 매도를 요청하면 이 도구를
-        호출하면 된다. 승인 전 단계에서는 예상 수령 벨만 안내된다.
+        사용자가 무를 팔아 달라고 하면 **망설이지 말고 이 도구를 호출하라.**
+        승인 절차는 시스템이 자동으로 끼워 넣는다. 이 도구를 호출해야 비로소
+        사용자에게 "이만큼 받는데 진행할까요?" 확인이 뜨고, 승인하기 전에는
+        아무것도 바뀌지 않는다. 호출하지 않으면 승인 절차가 시작되지 않는다.
+
+        확인 질문을 네가 직접 텍스트로 하지 마라. 그건 시스템의 몫이다.
 
         게임 본체를 조작하지는 않는다. 어시스턴트가 관리하는 기록을 바꾼다.
 
@@ -282,6 +285,26 @@ def build_tools(llm=None, retriever=None, store=None) -> list:
 
 
 # ── 플레이어 상태 (Store) ──────────────────────────────────────────────────
+
+
+def preview_sell_all(store, current_price: int) -> dict:
+    """매도를 실행하지 않고 결과만 미리 계산한다.
+
+    승인 화면에 보여주는 금액과 실제 매도 금액이 어긋나면 안 되므로,
+    sell_all_turnips 와 같은 식을 쓴다. 상태는 건드리지 않는다.
+    """
+    state = _read_state(store)
+    qty = state["turnips"]["quantity"]
+    buy_price = state["turnips"].get("buy_price")
+    revenue = qty * current_price
+    return {
+        "quantity": qty,
+        "buy_price": buy_price,
+        "current_price": current_price,
+        "revenue": revenue,
+        "profit": revenue - qty * buy_price if buy_price else None,
+        "new_bells": state["bells"] + revenue,
+    }
 
 
 def seed_player_state(store, seed_file: str = "player_state.json") -> dict:

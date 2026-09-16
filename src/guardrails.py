@@ -115,3 +115,31 @@ def check_output(answer: str, context_doc_ids: list[str]) -> tuple[str, GuardDec
                 GuardDecision(blocked=False, reason="citation_appended"))
 
     return answer, GuardDecision(blocked=False)
+
+
+# ── 승인 의사 판정 (HITL) ──────────────────────────────────────────────────
+
+_YES = re.compile(
+    r"(^|\s)(응|어|네|넵|예|웅|그래|좋아|오케이|ok|okay|yes|y)(\s|$|[.!~])|"
+    r"(진행|승인|실행|동의|확인)해?|팔아|매도해?|판다|계속"
+)
+_NO = re.compile(
+    r"(아니|아뇨|노|no|취소|그만|하지\s*마|안\s*팔|중단|멈춰|보류|나중에|싫)"
+)
+
+
+def parse_consent(text: str) -> bool | None:
+    """승인 대기 상태에서 사용자의 답을 판정한다.
+
+    True=승인 · False=거절 · None=판단 불가(되물어야 함)
+
+    LLM 에 맡기지 않는 이유: 오판 한 번에 되돌릴 수 없는 재화 기록이 바뀐다.
+    애매하면 진행하지 않고 되묻는 쪽이 항상 안전하다.
+    부정이 긍정보다 우선한다. "응 아니야" 같은 입력은 거절로 본다.
+    """
+    lowered = text.strip().lower()
+    if _NO.search(lowered):
+        return False
+    if _YES.search(lowered):
+        return True
+    return None
