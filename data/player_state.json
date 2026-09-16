@@ -1,0 +1,31 @@
+{
+  "island_name": "너굴섬",
+  "today": "2026-09-16(수)",
+  "bells": 42300,
+  "turnips": {
+    "quantity": 120,
+    "buy_price": 88,
+    "bought_at": "2026-09-13(일)"
+  },
+  "history": [
+    {
+      "date": "2026-09-06(일)",
+      "action": "buy",
+      "quantity": 80,
+      "unit_price": 95
+    },
+    {
+      "date": "2026-09-11(금)",
+      "action": "sell",
+      "quantity": 80,
+      "unit_price": 143,
+      "profit": 3840
+    },
+    {
+      "date": "2026-09-13(일)",
+      "action": "buy",
+      "quantity": 120,
+      "unit_price": 88
+    }
+  ]
+}

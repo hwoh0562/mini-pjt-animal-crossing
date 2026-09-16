@@ -1,0 +1,28 @@
+# 가상환경
+.venv/
+venv/
+
+# 파이썬
+__pycache__/
+*.py[cod]
+
+# 자격증명 — 절대 커밋하지 않는다
+.env
+.env.*
+!.env.example
+
+# 런타임 생성물 — 재현 가능하므로 커밋하지 않는다
+chroma_db/
+checkpoints.sqlite
+*.sqlite
+*.sqlite-journal
+
+# 교육 과정 내부 자료 — 공개 저장소에 올리지 않는다
+mini PJT.pdf
+
+# 제출용 아카이브
+*.zip
+
+# OS
+Thumbs.db
+.DS_Store

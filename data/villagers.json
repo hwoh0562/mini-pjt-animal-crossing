@@ -1,0 +1,162 @@
+[
+  {
+    "id": 1,
+    "name": "잭슨",
+    "species": "고양이",
+    "personality": "느끼함",
+    "birthday": "10월 1일",
+    "favorite_color": "블랙"
+  },
+  {
+    "id": 2,
+    "name": "쭈니",
+    "species": "다람쥐",
+    "personality": "느끼함",
+    "birthday": "9월 29일",
+    "favorite_color": "화이트"
+  },
+  {
+    "id": 3,
+    "name": "미애",
+    "species": "아기곰",
+    "personality": "성숙함",
+    "birthday": "3월 10일",
+    "favorite_color": "핑크"
+  },
+  {
+    "id": 4,
+    "name": "애플",
+    "species": "햄스터",
+    "personality": "아이돌",
+    "birthday": "9월 24일",
+    "favorite_color": "레드"
+  },
+  {
+    "id": 5,
+    "name": "뽀야미",
+    "species": "햄스터",
+    "personality": "친절함",
+    "birthday": "1월 30일",
+    "favorite_color": "핑크"
+  },
+  {
+    "id": 6,
+    "name": "시베리아",
+    "species": "늑대",
+    "personality": "무뚝뚝",
+    "birthday": "12월 18일",
+    "favorite_color": "블랙"
+  },
+  {
+    "id": 7,
+    "name": "비앙카",
+    "species": "늑대",
+    "personality": "성숙함",
+    "birthday": "9월 17일",
+    "favorite_color": "블루"
+  },
+  {
+    "id": 8,
+    "name": "사이다",
+    "species": "고양이",
+    "personality": "친절함",
+    "birthday": "3월 27일",
+    "favorite_color": "그레이"
+  },
+  {
+    "id": 9,
+    "name": "피터",
+    "species": "사슴",
+    "personality": "먹보",
+    "birthday": "4월 5일",
+    "favorite_color": "브라운"
+  },
+  {
+    "id": 10,
+    "name": "나탈리",
+    "species": "사슴",
+    "personality": "성숙함",
+    "birthday": "1월 4일",
+    "favorite_color": "퍼플"
+  },
+  {
+    "id": 11,
+    "name": "귀오미",
+    "species": "오리",
+    "personality": "친절함",
+    "birthday": "3월 7일",
+    "favorite_color": "옐로우"
+  },
+  {
+    "id": 12,
+    "name": "부케",
+    "species": "고양이",
+    "personality": "아이돌",
+    "birthday": "2월 27일",
+    "favorite_color": "핑크"
+  },
+  {
+    "id": 13,
+    "name": "패치",
+    "species": "아기곰",
+    "personality": "먹보",
+    "birthday": "2월 10일",
+    "favorite_color": "컬러풀"
+  },
+  {
+    "id": 14,
+    "name": "모니카",
+    "species": "늑대",
+    "personality": "아이돌",
+    "birthday": "8월 31일",
+    "favorite_color": "오렌지"
+  },
+  {
+    "id": 15,
+    "name": "차둘",
+    "species": "양",
+    "personality": "운동광",
+    "birthday": "3월 18일",
+    "favorite_color": "레드"
+  },
+  {
+    "id": 16,
+    "name": "1호",
+    "species": "고양이",
+    "personality": "운동광",
+    "birthday": "8월 1일",
+    "favorite_color": "레드"
+  },
+  {
+    "id": 17,
+    "name": "대장",
+    "species": "늑대",
+    "personality": "무뚝뚝",
+    "birthday": "12월 19일",
+    "favorite_color": "오렌지"
+  },
+  {
+    "id": 18,
+    "name": "릴리",
+    "species": "늑대",
+    "personality": "친절함",
+    "birthday": "3월 24일",
+    "favorite_color": "민트"
+  },
+  {
+    "id": 19,
+    "name": "솔미",
+    "species": "사슴",
+    "personality": "친절함",
+    "birthday": "3월 26일",
+    "favorite_color": "브라운"
+  },
+  {
+    "id": 20,
+    "name": "아폴로",
+    "species": "독수리",
+    "personality": "무뚝뚝",
+    "birthday": "7월 4일",
+    "favorite_color": "블랙"
+  }
+]
