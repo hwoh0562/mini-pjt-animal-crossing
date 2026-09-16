@@ -1,10 +1,17 @@
 """LangGraph 에이전트 그래프.
 
 흐름
-    START → agent ─[도구 호출 있음]→ tools ─┐
-              ↑                              │
-              └──────────────────────────────┘
-            └─[도구 호출 없음]→ generate → END
+    START → guardrail_in ─[차단]────────────────────────┐
+                 │                                      │
+              [통과]                                    │
+                 ↓                                      │
+               agent ─[도구 호출 있음]→ tools ─┐        │
+                 ↑                              │        │
+                 └──────────────────────────────┘        │
+                 └─[도구 호출 없음]→ generate ──→ guardrail_out → END
+
+입력 가드레일에 걸리면 LLM 을 한 번도 호출하지 않고 안내 문구만 내보낸다.
+차단이 결정적이라 차단율 100% 를 보장할 수 있고, 토큰도 들지 않는다.
 
 agent 노드와 generate 노드를 나눈 이유
     bind_tools 와 with_structured_output 은 둘 다 tool-calling 메커니즘을 쓰기
@@ -24,6 +31,7 @@ from datetime import datetime
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langgraph.graph import END, START, StateGraph
 
+from src.guardrails import check_input, check_output
 from src.llm import build_llm
 from src.schemas import AgentState, Answer, Context, QueryResponse, TraceStep
 from src.tools import build_tools
@@ -141,19 +149,50 @@ def build_graph(llm=None, tools=None, store=None, checkpointer=None, now_hour: i
                                 output=f"인용 {cited} · {_summarize(answer.answer_text, 150)}")],
         }
 
+    # ── guardrail_in: 규칙 기반 입력 필터 ──
+    def guard_in_node(state: AgentState) -> dict:
+        question = state["messages"][-1].content
+        decision = check_input(question)
+        return {
+            "blocked_reason": decision.reason or None,
+            "answer": decision.message,
+            "trace": [TraceStep(step="guardrail_in",
+                                input=_summarize(question, 150),
+                                output=f"block:{decision.reason}" if decision.blocked else "pass")],
+        }
+
+    # ── guardrail_out: 출력 검사 · 출처 보정 ──
+    def guard_out_node(state: AgentState) -> dict:
+        doc_ids = [c.doc_id for c in state.get("contexts", [])]
+        fixed, decision = check_output(state.get("answer", ""), doc_ids)
+        note = decision.reason or "pass"
+        return {
+            "answer": fixed,
+            "trace": [TraceStep(step="guardrail_out", input="답변 검사", output=note)],
+        }
+
+    def route_guard(state: AgentState) -> str:
+        # 차단됐으면 LLM 을 한 번도 호출하지 않고 안내 문구만 내보낸다.
+        return "blocked" if state.get("blocked_reason") else "agent"
+
     def route(state: AgentState) -> str:
         last = state["messages"][-1]
         return "tools" if getattr(last, "tool_calls", None) else "generate"
 
     graph = StateGraph(AgentState)
+    graph.add_node("guardrail_in", guard_in_node)
     graph.add_node("agent", agent_node)
     graph.add_node("tools", tool_node)
     graph.add_node("generate", generate_node)
+    graph.add_node("guardrail_out", guard_out_node)
 
-    graph.add_edge(START, "agent")
+    graph.add_edge(START, "guardrail_in")
+    graph.add_conditional_edges("guardrail_in", route_guard,
+                                {"blocked": "guardrail_out", "agent": "agent"})
     graph.add_conditional_edges("agent", route, {"tools": "tools", "generate": "generate"})
     graph.add_edge("tools", "agent")
-    graph.add_edge("generate", END)
+    graph.add_edge("generate", "guardrail_out")
+    graph.add_edge("guardrail_out", END)
 
     return graph.compile(checkpointer=checkpointer, store=store)
 
