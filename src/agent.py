@@ -1,17 +1,23 @@
 """LangGraph 에이전트 그래프.
 
 흐름
-    START → guardrail_in ─[차단]────────────────────────┐
-                 │                                      │
-              [통과]                                    │
-                 ↓                                      │
-               agent ─[도구 호출 있음]→ tools ─┐        │
-                 ↑                              │        │
-                 └──────────────────────────────┘        │
-                 └─[도구 호출 없음]→ generate ──→ guardrail_out → END
+    START → begin → guardrail_in ─[차단]────────────────┐
+                          │                             │
+                       [통과]                           │
+                          ↓                             │
+                        agent ─[도구 호출]→ tools ─┐    │
+                          ↑                        │    │
+                          └────────────────────────┘    │
+                          └─[도구 호출 없음]→ generate ─→ guardrail_out → END
 
 입력 가드레일에 걸리면 LLM 을 한 번도 호출하지 않고 안내 문구만 내보낸다.
 차단이 결정적이라 차단율 100% 를 보장할 수 있고, 토큰도 들지 않는다.
+
+begin 노드가 하는 일
+    체크포인터를 쓰면 상태가 요청 사이에 남는다. messages 는 멀티턴을 위해
+    쌓여야 하지만 trace 와 contexts 는 이번 질의의 것만 응답에 실어야 하므로
+    매 요청 첫머리에서 비운다. 이번 질문도 여기서 state 에 박아, 대화가 길어져도
+    generate 가 답할 대상을 잃지 않게 한다.
 
 agent 노드와 generate 노드를 나눈 이유
     bind_tools 와 with_structured_output 은 둘 다 tool-calling 메커니즘을 쓰기
@@ -61,7 +67,12 @@ SYSTEM_PROMPT = """너는 '모여봐요 동물의 숲' 플레이어를 돕는 �
 현재 시각은 {hour}시다. 시각이 필요한 도구에는 이 값을 쓰되, 사용자가 다른
 시각을 말하면 그 값을 우선한다."""
 
-GENERATE_PROMPT = """위 대화의 도구 결과만을 근거로 사용자 질문에 최종 답변하라.
+GENERATE_PROMPT = """이번에 답해야 할 질문은 다음 한 건이다. 앞선 대화는 참고용일 뿐이니
+여기에만 답하라.
+
+    질문: {question}
+
+위 대화의 도구 결과만을 근거로 이 질문에 최종 답변하라.
 
 - answer_text: 사용자에게 보여줄 답변. 근거 문서 id 를 문장 안에 함께 적는다.
 - cited_doc_ids: 실제로 근거로 삼은 문서 id 목록. 도구가 문서를 돌려주지
@@ -176,7 +187,8 @@ def build_graph(llm=None, tools=None, store=None, checkpointer=None, now_hour: i
 
     # ── generate: 구조화 출력으로 최종 답변 ──
     def generate_node(state: AgentState) -> dict:
-        messages = [_system_message(), *state["messages"], HumanMessage(GENERATE_PROMPT)]
+        messages = [_system_message(), *state["messages"],
+                    HumanMessage(GENERATE_PROMPT.format(question=state.get("question", "")))]
         try:
             answer: Answer = model.with_structured_output(Answer).invoke(messages)
             if answer is None:
@@ -196,9 +208,20 @@ def build_graph(llm=None, tools=None, store=None, checkpointer=None, now_hour: i
                                 output=f"인용 {cited} · {_summarize(answer.answer_text, 150)}")],
         }
 
+    # ── begin: 요청 단위 상태 초기화 ──
+    def begin_node(state: AgentState) -> dict:
+        """이번 요청의 trace · contexts 를 비우고 질문을 기록한다.
+
+        체크포인터를 쓰면 상태가 요청 사이에 남는다. messages 는 멀티턴을 위해
+        쌓여야 하지만 trace · contexts 는 이번 질의의 것만 응답에 실어야 한다.
+        리셋과 append 를 한 노드에서 같이 할 수 없어 노드를 따로 뒀다.
+        """
+        return {"trace": None, "contexts": None,
+                "question": state["messages"][-1].content, "answer": ""}
+
     # ── guardrail_in: 규칙 기반 입력 필터 ──
     def guard_in_node(state: AgentState) -> dict:
-        question = state["messages"][-1].content
+        question = state["question"]
         decision = check_input(question)
         return {
             "blocked_reason": decision.reason or None,
@@ -227,13 +250,15 @@ def build_graph(llm=None, tools=None, store=None, checkpointer=None, now_hour: i
         return "tools" if getattr(last, "tool_calls", None) else "generate"
 
     graph = StateGraph(AgentState)
+    graph.add_node("begin", begin_node)
     graph.add_node("guardrail_in", guard_in_node)
     graph.add_node("agent", agent_node)
     graph.add_node("tools", tool_node)
     graph.add_node("generate", generate_node)
     graph.add_node("guardrail_out", guard_out_node)
 
-    graph.add_edge(START, "guardrail_in")
+    graph.add_edge(START, "begin")
+    graph.add_edge("begin", "guardrail_in")
     graph.add_conditional_edges("guardrail_in", route_guard,
                                 {"blocked": "guardrail_out", "agent": "agent"})
     graph.add_conditional_edges("agent", route, {"tools": "tools", "generate": "generate"})
@@ -250,8 +275,9 @@ def build_graph(llm=None, tools=None, store=None, checkpointer=None, now_hour: i
 def to_response(state: dict) -> QueryResponse:
     """그래프 최종 상태를 API 응답 규약으로 옮긴다.
 
-    같은 문서가 여러 도구에서 중복으로 올라올 수 있으므로 doc_id 로 한 번
-    걸러낸다. 순서는 처음 등장한 순서를 유지한다.
+    trace 와 contexts 는 begin 노드가 요청마다 비우므로 그대로 실으면 된다.
+    같은 문서가 여러 도구에서 중복으로 올라올 수 있어 doc_id 로 한 번 걸러내되,
+    처음 등장한 순서는 유지한다.
     """
     seen, contexts = set(), []
     for ctx in state.get("contexts", []):
@@ -301,7 +327,11 @@ def ask(graph, question: str, config: dict | None = None) -> QueryResponse:
 
 
 def resume(graph, approved: bool, config: dict) -> QueryResponse:
-    """승인 대기 상태를 사용자의 결정으로 재개한다."""
+    """승인 대기 상태를 사용자의 결정으로 재개한다.
+
+    재개하면 멈췄던 노드부터 이어지므로 trace 는 1턴의 것에 계속 쌓인다.
+    begin 노드는 다시 돌지 않는다.
+    """
     state = graph.invoke(Command(resume={"approved": approved}), config)
     return _interrupt_response(state) or to_response(state)
 

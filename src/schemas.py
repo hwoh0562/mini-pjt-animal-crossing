@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import operator
-from typing import Annotated, Literal, TypedDict
+from typing import Annotated, Any, Literal, TypedDict
 
 from pydantic import BaseModel, Field
 
@@ -89,12 +89,23 @@ class RetrievedDoc(BaseModel):
 # ── 에이전트 상태 ──────────────────────────────────────────────────────────
 
 
+def append_or_reset(left: list | None, right: list | None) -> list:
+    """이어붙이되, None 을 보내면 비운다.
+
+    messages 는 멀티턴을 위해 스레드에 계속 쌓여야 하지만, trace 와 contexts 는
+    '이번 질의'의 것만 응답에 실어야 한다. 체크포인터를 쓰면 상태가 요청 사이에
+    보존되므로, 매 요청 첫 노드에서 None 을 흘려 비운다.
+    """
+    if right is None:
+        return []
+    return (left or []) + list(right)
+
+
 class AgentState(TypedDict):
     """LangGraph 그래프가 들고 다니는 상태.
 
-    trace 와 contexts 에 operator.add 리듀서를 걸어두면, 각 노드는 자기 몫
-    한 건만 반환하면 되고 LangGraph 가 순서대로 이어붙인다. 별도의 수집기가
-    필요 없다.
+    trace 와 contexts 에 리듀서를 걸어두면 각 노드는 자기 몫 한 건만 반환하면
+    되고 LangGraph 가 순서대로 이어붙인다. 별도의 수집기가 필요 없다.
 
     필드를 늘리고 싶어질 때 먼저 아래를 검토할 것:
       - retry_used  → 재시도는 retriever 내부에서 끝내므로 상태에 둘 필요 없음
@@ -105,9 +116,12 @@ class AgentState(TypedDict):
     # add_messages 를 쓰지 않는 이유는 이 모듈을 langgraph 비의존으로 두기
     # 위해서다. 실제 타입은 list[AnyMessage] 이다.
     messages: Annotated[list, operator.add]
-    trace: Annotated[list[TraceStep], operator.add]
-    contexts: Annotated[list[Context], operator.add]
+    trace: Annotated[list[TraceStep], append_or_reset]
+    contexts: Annotated[list[Context], append_or_reset]
 
+    # 이번 요청의 질문. 대화 이력이 길어져도 generate 가 답할 대상을 잃지
+    # 않도록 명시적으로 들고 간다.
+    question: str
     # 입력 가드레일 차단 사유. None 이면 통과.
     blocked_reason: str | None
     # generate 단계가 채우는 최종 답변.
