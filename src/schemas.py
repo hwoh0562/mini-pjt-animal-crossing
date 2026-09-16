@@ -101,8 +101,9 @@ class AgentState(TypedDict):
       - cited_doc_ids → 출력 가드레일이 answer 문자열과 contexts 를 대조하면 됨
     """
 
-    # add_messages 리듀서는 agent.py 에서 붙인다(여기서 langgraph 를 import 하지
-    # 않기 위함). 실제 타입은 list[AnyMessage] 이다.
+    # 노드가 메시지를 덧붙이기만 하므로 operator.add 로 충분하다.
+    # add_messages 를 쓰지 않는 이유는 이 모듈을 langgraph 비의존으로 두기
+    # 위해서다. 실제 타입은 list[AnyMessage] 이다.
     messages: Annotated[list, operator.add]
     trace: Annotated[list[TraceStep], operator.add]
     contexts: Annotated[list[Context], operator.add]

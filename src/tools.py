@@ -31,6 +31,9 @@ PLAYER_KEY = "state"
 # 승인 없이 실행하면 안 되는 도구. 툴 노드가 이 목록을 보고 interrupt() 한다.
 DANGEROUS_TOOLS = {"sell_all_turnips"}
 
+# 생물 조회 결과의 최대 건수(판매가 높은 순).
+CRITTER_LIMIT = 15
+
 
 def _result(data, docs=None) -> dict:
     return {"data": data, "docs": docs or []}
@@ -135,6 +138,10 @@ def build_tools(llm=None, retriever=None, store=None) -> list:
         보유하지 않은 조건: 출현 월·계절·반구·날씨. 해산물 자료도 없다.
         이런 조건을 요구받으면 이 도구를 쓰지 말고 자료가 없다고 안내하라.
 
+        결과는 판매가가 높은 순으로 최대 15종만 돌려준다. 조건에 드는 전체
+        건수는 total_count 에 있으니, 목록이 전부가 아니라면 그 사실을 함께
+        알려라.
+
         Args:
             category: '곤충' 또는 '물고기'
             hour: 0~23 의 24시간제 시각
@@ -152,11 +159,15 @@ def build_tools(llm=None, retriever=None, store=None) -> list:
         if min_price is not None:
             hits = [r for r in hits if r["price"] >= min_price]
         hits.sort(key=lambda r: -r["price"])
+        # 조건에 드는 종이 수십 개라 전부 실으면 답변이 길어지고 구조화 출력이
+        # 잘린다. 판매가 높은 순 상위만 싣고 전체 건수를 함께 알려준다.
+        shown = hits[:CRITTER_LIMIT]
 
         docs = [{"doc_id": r["id"],
                  "text": f"{r['name']}({r['id']}) · {r['location']} · {r['time']} · {r['price']}벨"}
-                for r in hits]
-        return _result({"count": len(hits), "hour": hour, "critters": hits}, docs)
+                for r in shown]
+        return _result({"total_count": len(hits), "shown_count": len(shown), "hour": hour,
+                        "sorted_by": "판매가 내림차순", "critters": shown}, docs)
 
     # ── 3. 주민 구조화 필터 ──
     @tool
