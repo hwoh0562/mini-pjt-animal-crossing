@@ -13,9 +13,9 @@ __pycache__/
 
 # 런타임 생성물 — 재현 가능하므로 커밋하지 않는다
 chroma_db/
-checkpoints.sqlite
 *.sqlite
-*.sqlite-journal
+# SQLite 가 WAL 모드에서 만드는 곁파일. *.sqlite 패턴에 걸리지 않는다.
+*.sqlite-*
 
 # 교육 과정 내부 자료 — 공개 저장소에 올리지 않는다
 mini PJT.pdf
