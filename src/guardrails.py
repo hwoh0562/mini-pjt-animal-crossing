@@ -113,9 +113,12 @@ def check_output(answer: str, context_doc_ids: list[str]) -> tuple[str, GuardDec
                 GuardDecision(blocked=True, reason="prompt_leak"),
             )
 
-    if context_doc_ids and not DOC_ID_RE.search(answer):
-        sources = " · ".join(dict.fromkeys(context_doc_ids))
-        return (f"{answer}\n\n(출처: {sources})",
+    if context_doc_ids and "출처" not in answer:
+        # 본문에 (V-02) 처럼 id 를 흘려 적는 것만으로는 출처를 밝혔다고 보기
+        # 어렵다. 근거가 있으면 '출처:' 줄을 항상 덧붙여 명시적으로 만든다.
+        unique = list(dict.fromkeys(context_doc_ids))
+        shown = " · ".join(unique[:10]) + (f" 외 {len(unique) - 10}건" if len(unique) > 10 else "")
+        return (f"{answer}\n\n출처: {shown}",
                 GuardDecision(blocked=False, reason="citation_appended"))
 
     return answer, GuardDecision(blocked=False)

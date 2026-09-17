@@ -33,7 +33,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from src.agent import ask, build_graph, is_awaiting_approval  # noqa: E402
 from src.llm import build_llm, enable_llm_cache  # noqa: E402
 from src.retriever import PROJECT_ROOT  # noqa: E402
-from src.tools import PLAYER_KEY, PLAYER_NS, seed_player_state  # noqa: E402
+from src.tools import PLAYER_KEY, PLAYER_NS, hour_matches, seed_player_state  # noqa: E402
 
 CSV_PATH = PROJECT_ROOT / "evaluation" / "test_queries.csv"
 
@@ -89,6 +89,18 @@ def called_tools(response) -> list[str]:
     return names
 
 
+def wrong_hour_critters(store_contexts: list[str]) -> list[str]:
+    """근거로 실린 생물 중 NOW_HOUR 에 출현하지 않는 것을 찾아낸다."""
+    import json as _json
+
+    table = {}
+    for name in ("insects.json", "fishes.json"):
+        with open(PROJECT_ROOT / "data" / name, encoding="utf-8") as f:
+            table.update({row["id"]: row for row in _json.load(f)})
+    return [doc_id for doc_id in store_contexts
+            if doc_id in table and not hour_matches(NOW_HOUR, table[doc_id]["time"])]
+
+
 def run_case(row: dict, judge_llm) -> dict:
     """케이스 하나를 실행하고 판정한다."""
     case_id = row["id"]
@@ -121,6 +133,13 @@ def run_case(row: dict, judge_llm) -> dict:
         waiting = is_awaiting_approval(graph, config)
         extra_ok = qty == 120 and waiting
         extra_note = f"승인대기={waiting} · 무 보유={qty}개(기대 120)"
+    elif case_id == "4":
+        # '해당 시각에 안 나오는 종이 섞였는가'는 사실 관계라 코드로 본다.
+        # LLM 판정자는 시간대 포함 여부를 맞게 분석해 놓고도 금지 항목을
+        # 잘못 거는 일이 있었다.
+        bad = wrong_hour_critters(store_contexts=[c.doc_id for c in response.contexts])
+        extra_ok = not bad
+        extra_note = f"20시에 출현하지 않는 종 혼입: {bad}" if bad else ""
 
     verdict = judge_llm.with_structured_output(Verdict).invoke(JUDGE_PROMPT.format(
         question=row["input"],

@@ -29,7 +29,20 @@ def build_llm(llm=None, *, max_tokens: int = 1024, temperature: float = 0.0):
         region_name=os.getenv("AWS_DEFAULT_REGION", "us-east-1"),
         max_tokens=max_tokens,
         temperature=temperature,
+        config=bedrock_retry_config(),
     )
+
+
+def bedrock_retry_config():
+    """ThrottlingException 에 대비한 적응형 재시도 설정.
+
+    Bedrock 은 일일 토큰 한도에 가까워지면 ThrottlingException 을 던진다.
+    기본 재시도 4회로는 평가를 한 바퀴 도는 중에 터져 결과가 통째로 망가진다.
+    adaptive 모드는 응답을 보고 호출 속도를 스스로 늦춘다.
+    """
+    from botocore.config import Config
+
+    return Config(retries={"max_attempts": 10, "mode": "adaptive"})
 
 
 def enable_llm_cache(path: str = "llm_cache.sqlite") -> None:

@@ -107,12 +107,16 @@ async def score_all(samples: list[dict]) -> dict[str, float]:
     for sample in samples:
         turn = SingleTurnSample(
             **{k: v for k, v in sample.items() if not k.startswith("_")})
+        sample["_scores"] = {}
         for metric in metrics:
             try:
-                per_metric[metric.name].append(float(await metric._single_turn_ascore(turn, None)))
+                score = float(await metric._single_turn_ascore(turn, None))
+                per_metric[metric.name].append(score)
+                sample["_scores"][metric.name] = round(score, 3)
             except Exception as exc:
-                print(f"  [{sample['_id']}] {metric.name} 실패: {type(exc).__name__}")
-        print(f"  [{sample['_id']}] 채점 완료")
+                sample["_scores"][metric.name] = f"실패({type(exc).__name__})"
+        print(f"  [{sample['_id']}] " +
+              " ".join(f"{k[:4]}={v}" for k, v in sample["_scores"].items()))
 
     return {name: sum(v) / len(v) for name, v in per_metric.items() if v}
 

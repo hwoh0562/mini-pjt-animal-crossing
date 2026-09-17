@@ -136,9 +136,12 @@ def build_embeddings(embeddings=None):
         return embeddings
     from langchain_aws import BedrockEmbeddings
 
+    from src.llm import bedrock_retry_config
+
     return BedrockEmbeddings(
         model_id=os.getenv("BEDROCK_EMBED_MODEL_ID", "amazon.titan-embed-text-v2:0"),
         region_name=os.getenv("AWS_DEFAULT_REGION", "us-east-1"),
+        config=bedrock_retry_config(),
     )
 
 
@@ -309,9 +312,18 @@ class AcnhRetriever:
 
         listing = "\n".join(f"[{d.metadata['doc_id']}] {d.page_content}" for d, _ in candidates)
         prompt = (
-            "아래 문서들이 질문에 답하는 데 실제로 쓸모 있는지 0~10으로 채점하라.\n"
-            "질문이 묻는 대상이 문서에 없으면 주저 없이 0점을 줘라. "
-            "억지로 높은 점수를 주지 마라.\n\n"
+            "아래 문서들이 질문에 답하는 데 실제로 쓸모 있는지 0~10으로 채점하라.\n\n"
+            "채점 기준\n"
+            "- 9~10: 이 문서만으로 질문에 답할 수 있다.\n"
+            "- 5~8 : 답의 일부를 담고 있다.\n"
+            "- 1~4 : 주제만 같고 질문에 답하지는 못한다.\n"
+            "- 0    : 질문이 묻는 대상이 문서에 아예 없다.\n\n"
+            "두 가지를 구분하라.\n"
+            "- 여러 문서를 이어붙여야 답이 완성되는 질문이라면, 그 연결고리가 되는 "
+            "문서에도 높은 점수를 준다. 예: '쭈니 선물'을 물으면 쭈니의 성격을 알려주는 "
+            "주민 문서와 그 성격의 선물 목록 문서가 둘 다 필요하다.\n"
+            "- 반대로 '전체에 공통으로 적용되는 규칙'을 물었는데 개별 사례 하나만 담은 "
+            "문서라면, 주제가 같아도 질문에 답하지 못하므로 낮은 점수다.\n\n"
             f"질문: {query}\n\n문서:\n{listing}"
         )
         try:

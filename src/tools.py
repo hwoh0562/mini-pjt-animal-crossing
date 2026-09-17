@@ -108,9 +108,15 @@ def build_tools(llm=None, retriever=None, store=None) -> list:
           이 도구는 유사도 상위 몇 건만 돌려주므로 '조건을 만족하는 전원'을
           보장하지 못한다.
 
+        주민에게 줄 선물을 물으면 **주민 문서(V-*)와 성격 가이드(P-*)가 둘 다**
+        필요하다. 주민 문서에는 성격 이름만 있고 어떤 선물을 좋아하는지는 성격
+        가이드에 있기 때문이다. 이때 doc_type 을 걸면 한쪽만 나와 구체적인 선물을
+        답할 수 없으니, 선물 질문에는 doc_type 을 쓰지 마라.
+
         Args:
             query: 찾으려는 내용
-            doc_type: insect · fish · villager · personality 중 하나로 범위를 좁힐 때
+            doc_type: insect · fish · villager · personality 중 하나로 범위를 좁힐 때.
+                꼭 필요할 때만 쓴다. 기본은 비워 두고 전체에서 찾는 것이 낫다.
         """
         res = _retriever.search(query, doc_type=doc_type)
         if not res.docs:
@@ -181,6 +187,11 @@ def build_tools(llm=None, retriever=None, store=None) -> list:
         돌려주며, 없으면 빈 목록을 돌려준다. 빈 목록은 '해당 없음'이라는 확정된
         답이므로 다른 주민으로 대신 채우지 마라.
 
+        조건을 여러 개 걸었는데 결과가 비면 partial_matches 에 조건별 결과가
+        함께 담긴다. 이걸 근거로 왜 해당자가 없는지 설명하라.
+        예: "느끼함 주민은 잭슨(10월 1일)과 쭈니(9월 29일) 둘뿐이라 3월 생일자는
+        없습니다."
+
         쓰지 말아야 할 때:
           - 주민 이름을 이미 아는 경우 → retrieve_docs
             ("쭈니 선물 추천"은 이 도구가 아니라 retrieve_docs 다)
@@ -190,21 +201,42 @@ def build_tools(llm=None, retriever=None, store=None) -> list:
             personality: 성격. 느끼함·성숙함·아이돌·친절함·무뚝뚝·먹보·운동광 중 하나
             birth_month: 생일 월(1~12)
         """
-        hits = villagers
-        if species:
-            hits = [v for v in hits if v["species"] == species]
-        if personality:
-            hits = [v for v in hits if v["personality"] == personality]
-        if birth_month is not None:
-            hits = [v for v in hits if _month_of(v["birthday"]) == birth_month]
+        conditions = {
+            "species": (species, lambda v: v["species"] == species),
+            "personality": (personality, lambda v: v["personality"] == personality),
+            "birth_month": (birth_month, lambda v: _month_of(v["birthday"]) == birth_month),
+        }
+        given = {k: fn for k, (value, fn) in conditions.items() if value is not None}
 
-        docs = [{"doc_id": villager_doc_id(v["id"]),
-                 "text": (f"{v['name']}({villager_doc_id(v['id'])}) · {v['species']} · "
-                          f"{v['personality']} · {v['birthday']} · {v['favorite_color']}")}
-                for v in hits]
-        return _result({"count": len(hits),
-                        "villagers": [{**v, "doc_id": villager_doc_id(v["id"])} for v in hits]},
-                       docs)
+        hits = villagers
+        for match in given.values():
+            hits = [v for v in hits if match(v)]
+
+        data = {"count": len(hits),
+                "villagers": [{**v, "doc_id": villager_doc_id(v["id"])} for v in hits]}
+        shown = list(hits)
+
+        # 조건을 여러 개 걸어 결과가 비면, 조건별로 하나씩만 적용한 결과를 함께
+        # 돌려준다. '왜 없는지'를 설명할 근거가 없으면 답변이 "없습니다" 한 줄로
+        # 끝나 버리기 때문이다.
+        if not hits and len(given) > 1:
+            partial = {}
+            for name, match in given.items():
+                matched = [v for v in villagers if match(v)]
+                partial[name] = [{**v, "doc_id": villager_doc_id(v["id"])} for v in matched]
+                shown.extend(matched)
+            data["partial_matches"] = partial
+
+        seen, docs = set(), []
+        for v in shown:
+            doc_id = villager_doc_id(v["id"])
+            if doc_id in seen:
+                continue
+            seen.add(doc_id)
+            docs.append({"doc_id": doc_id,
+                         "text": (f"{v['name']}({doc_id}) · {v['species']} · "
+                                  f"{v['personality']} · {v['birthday']} · {v['favorite_color']}")})
+        return _result(data, docs)
 
     # ── 4. 플레이어 상태 조회 ──
     @tool
