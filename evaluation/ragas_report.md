@@ -6,7 +6,7 @@
 
 > ⚠️ 이 실행은 도중에 Bedrock ThrottlingException(일일 토큰 한도)에 걸려
 > 일부 판정 호출이 실패했다. faithfulness 가 특히 영향을 받았다.
-> 쿼터 회복 후  로 재측정이 필요하다.
+> 쿼터 회복 후 python -m evaluation.run_ragas 로 재측정이 필요하다.
 > 직전 정상 실행값: faithfulness 0.924 · context_recall 1.000 ·
 > context_precision 0.900 · answer_relevancy 0.904
 
