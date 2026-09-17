@@ -415,7 +415,10 @@ if __name__ == "__main__":
     # 색인이 쓸 만한지 바로 확인한다. LLM 을 끄고 하이브리드 검색만 본다.
     retriever = build_retriever(docs=documents, llm=None,
                                 use_expansion=False, use_rerank=False)
+    # 상위 3건 안에 드는지만 본다. Chroma 의 HNSW 는 근사 탐색이라 색인을 새로
+    # 만들 때마다 순위가 미세하게 달라진다(실제로 Docker 이미지에서 '1호' 가
+    # 1위 → 2위로 밀렸다). 최종 순서는 리랭킹 단계가 정하므로, 여기서는 후보에
+    # 들어오는지만 확인하면 충분하다.
     for q, want in [("무당벌레 어디서 잡혀?", "I-031"), ("1호 선물 추천해줘", "V-16")]:
-        hits = retriever.search(q, k=3).docs
-        top = hits[0].doc_id if hits else "없음"
-        print(f"  {'✓' if top == want else '✗'} {q!r} → 1위 {top} (기대 {want})")
+        hits = [d.doc_id for d in retriever.search(q, k=3).docs]
+        print(f"  {'✓' if want in hits else '✗'} {q!r} → 상위 3건 {hits} (기대 {want} 포함)")

@@ -93,7 +93,7 @@ mini-pjt/
 ├── SERVICE.md                  #    서비스 스펙 · 채점 대상
 ├── README.md                   #    산출물 규약 §4-5 템플릿
 ├── requirements.txt
-└── Dockerfile                  # ⬜ 선택사항 · 미작성
+└── Dockerfile                  #    python:3.12-slim · 빌드 검증 완료
 ```
 
 ### 주요 명령어
