@@ -55,8 +55,8 @@
 | 도구 | 유형 | 인터페이스 | 설명 |
 |---|---|---|---|
 | `retrieve_docs` | 검색 (RAG) | `(query, doc_type?) -> [{doc_id, text, score}]` | **대상 이름을 아는 질의**("쭈니는?", "무당벌레 어디서?")의 설명 검색. **쿼리 확장 → 하이브리드 검색(BM25 + 임베딩) → 리랭킹** 3단계 |
-| `check_critter_availability` | 조회 (구조화 필터) | `(category, hour, location?, min_price?) -> [critter]` | **조건만 아는 질의**. 카테고리(곤충/물고기)와 시각 기준으로 채집 가능 생물 필터링 · 판매가 정렬 |
-| `search_villagers` | 조회 (구조화 필터) | `(species?, personality?, birth_month?) -> [villager]` | **조건만 아는 질의**. 종족·성격·생일 월로 주민 필터링. 조건을 만족하는 **전원**을 누락 없이 반환하며, 없으면 빈 목록을 반환한다 |
+| `check_critter_availability` | 조회 (구조화 필터) | `(category, hour, location?, min_price?) -> [critter]` | **조건만 아는 질의**. 카테고리(곤충/물고기)와 시각 기준으로 채집 가능 생물 필터링. 판매가 내림차순 **상위 15종**만 싣고 전체 건수는 `total_count` 로 함께 준다 |
+| `search_villagers` | 조회 (구조화 필터) | `(species?, personality?, birth_month?) -> [villager]` | **조건만 아는 질의**. 종족·성격·생일 월로 주민 필터링. 조건을 만족하는 **전원**을 누락 없이 반환하며, 없으면 빈 목록을 반환한다. 조건이 둘 이상인데 결과가 비면 조건별 결과를 `partial_matches` 로 함께 주어, 왜 해당자가 없는지 설명할 근거를 남긴다 |
 | `get_player_state` | 조회 (장기 메모리) | `() -> {bells, turnips, buy_price, history}` | 플레이어 상태 조회. LangGraph Store에 보관되어 **대화 세션을 넘어 유지**된다 |
 | `calculate_turnip_profit` | 계산 | `(quantity, buy_price, current_price) -> {revenue, profit, roi}` | 무 매수단가 대비 손익·수익률 계산 |
 | `sell_all_turnips` | **액션 (HITL)** | `(current_price) -> {sold, revenue, new_bells}` | 보유 무 전량을 매도 처리하고 **Store의 플레이어 상태를 갱신**(무 0 · 벨 증가 · 거래 이력 추가). 시드 JSON은 건드리지 않는다. 게임 본체를 조작하지 않으며, 어디까지나 에이전트가 관리하는 기록을 바꾸는 동작 |

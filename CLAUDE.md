@@ -12,6 +12,7 @@
 - **과제**: SDS AX 미니 PJT (Day 8~10 · 개별 프로젝트 · 제출 마감 Day 10 15:00)
 - **서비스 스펙의 단일 기준 문서**: `SERVICE.md` — 도구 정의·데이터 범위·가드레일 5개·성공 기준이 전부 여기 있다. 구현이 스펙과 어긋나면 **둘 중 하나를 고쳐 반드시 일치시킨다.**
 - **평가 세트**: `evaluation/test_queries.csv` (20건 · 7컬럼 · positive 8 / negative 4 / edge 5 / guardrail 3)
+- **결과**: 1차 15/20(75%) → 2차 **20/20(100%)**. RAGAS 4지표 전부 목표 충족.
 - **목표**: 1차 70% → 2차 85% 통과. 아래 4개는 **타협 없는 100%/0건**이다.
   - 가드레일(id 18~20) 차단율 **100%**
   - 무 손익 계산 오류(id 7) **0건**
@@ -60,46 +61,52 @@ guardrail_in · retrieve · retrieve_retry · tool · generate · guardrail_out
 
 ### 디렉토리 구조
 
+의존은 아래 번호 순서로만 흐른다. **역방향 import 금지.**
+
 ```
 mini-pjt/
-├── src/                        # ⬜ 미착수 · 의존은 아래 순서로만 흐른다(역방향 import 금지)
-│   ├── schemas.py              # 1. 의존 0 — Pydantic 응답 모델 + AgentState TypedDict  ✅
-│   ├── llm.py                  # 2. 의존 0 — Bedrock LLM 팩토리 + SQLiteCache          ✅
-│   ├── guardrails.py           # 3. 의존 0 — 차단 규칙 목록 + 판정 (순수 함수)
-│   ├── retriever.py            # 4. RAG — 쿼리 확장 → 하이브리드(BM25+임베딩) → 리랭킹 + 재시도  ✅
-│   ├── tools.py                # 5. 도메인 도구 6개 · build_tools(llm=None, retriever=None)
-│   ├── agent.py                # 6. LangGraph 그래프 · build_graph(llm=None, ...)
-│   └── api.py                  # 7. FastAPI · POST /query
-├── data/                       # ✅ 완료
-│   ├── make_data.py            #    더미 데이터 생성 스크립트 (단일 생성 지점)
-│   ├── insects.json            #    곤충 50종  (doc_id: I-001~I-050)
+├── src/
+│   ├── schemas.py              # 1. 의존 0 — 응답 모델 + AgentState + append_or_reset
+│   ├── llm.py                  # 2. 의존 0 — Bedrock 팩토리 · SQLiteCache · 재시도 설정
+│   ├── guardrails.py           # 3. 의존 0 — 차단 규칙 · 출력 검사 · 승인 의사 판정
+│   ├── retriever.py            # 4. RAG — 쿼리 확장 → 하이브리드 → 리랭킹 + 재시도
+│   ├── tools.py                # 5. 도메인 도구 6개 · build_tools(llm, retriever, store)
+│   ├── agent.py                # 6. LangGraph 그래프 · build_graph(...)
+│   └── api.py                  # 7. FastAPI · POST /query (승인 2턴 분기)
+├── data/
+│   ├── make_data.py            #    더미 데이터 생성 (단일 생성 지점 · seed 42)
+│   ├── insects.json            #    곤충 50종   (doc_id: I-001~I-050)
 │   ├── fishes.json             #    물고기 50종 (doc_id: F-001~F-050)
 │   ├── villagers.json          #    주민 20명   (doc_id: V-01~V-20)
-│   ├── personalities.md        #    성격 7종 선물 가이드 (doc_id: P-00~P-07)
-│   ├── player_state.json       #    플레이어 더미 상태
-│   └── player_state_no_price.json  # 매수단가 null 상태 (test id=14 전용)
+│   ├── personalities.md        #    성격 7종 + 공통 규칙 (doc_id: P-00~P-07)
+│   ├── player_state.json       #    플레이어 상태 시드
+│   └── player_state_no_price.json  # 매수단가 null 시드 (test id=14 전용)
 ├── evaluation/
-│   ├── test_queries.csv        # ✅ 완료 · 채점 대상
-│   ├── ragas_set.csv           # ⬜ RAGAS용 ground_truth 별도 관리
-│   ├── run_eval.py             # ⬜ LLM-as-Judge 채점 러너
-│   ├── round1_report.md        # ⬜ Day 9
-│   └── round2_report.md        # ⬜ Day 10
-├── SERVICE.md                  # ✅ 완료 · 채점 대상
-├── README.md                   # ⬜ 템플릿 §4-5 준수
-├── requirements.txt            # ⬜
-└── Dockerfile                  # ⬜ 선택
+│   ├── test_queries.csv        #    인-아웃 세트 20건 · 채점 대상
+│   ├── ragas_set.csv           #    RAGAS용 ground_truth 10건 (별도 세트)
+│   ├── run_eval.py             #    LLM-as-Judge 러너
+│   ├── run_ragas.py            #    RAGAS 4지표 러너
+│   ├── round1_report.md        #    1차 15/20 (75%)
+│   ├── round2_report.md        #    2차 20/20 (100%)
+│   ├── ragas_report.md         #    RAGAS 결과
+│   └── *_raw.json              #    각 리포트의 원시 결과 (디버깅용)
+├── SERVICE.md                  #    서비스 스펙 · 채점 대상
+├── README.md                   #    산출물 규약 §4-5 템플릿
+├── requirements.txt
+└── Dockerfile                  # ⬜ 선택사항 · 미작성
 ```
 
 ### 주요 명령어
 
 ```bash
-# 현재 동작하는 것
-python data/make_data.py                      # 더미 데이터 재생성 (시드 고정 · 항상 같은 결과)
-
-# 구현 후 사용할 것
-uvicorn src.api:app --reload --port 8000      # API 서버
-python evaluation/run_eval.py --round 1       # 자체 평가 → round1_report.md
+python data/make_data.py                   # 더미 데이터 재생성 (시드 고정)
+python -m src.retriever                    # Chroma 색인 128건 + 검색 스모크 테스트
+uvicorn src.api:app --reload --port 8000   # API 서버
+python -m evaluation.run_eval --round 2    # 자체 평가 → round2_report.md
+python -m evaluation.run_ragas             # RAGAS → ragas_report.md
 ```
+
+평가 러너는 `--only 1,13` 으로 특정 케이스만 돌릴 수 있다. 실패 원인을 좁힐 때 쓴다.
 
 ---
 
