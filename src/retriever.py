@@ -402,9 +402,15 @@ if __name__ == "__main__":
     counts = Counter(d.metadata["doc_type"] for d in documents)
     print(f"문서 {len(documents)}건: " + " · ".join(f"{k} {v}" for k, v in counts.items()))
 
-    print(f"색인 중... (Chroma: {PERSIST_DIR})")
-    n = index_documents(docs=documents)
-    print(f"색인 완료: {n}건\n")
+    # 이미 같은 건수가 들어 있으면 다시 임베딩하지 않는다. 컨테이너를 재시작할
+    # 때마다 128건을 다시 태우면 시간도 토큰도 낭비다.
+    vectorstore = build_vectorstore()
+    if vectorstore._collection.count() == len(documents):
+        print(f"이미 색인되어 있습니다 ({len(documents)}건). 건너뜁니다.\n")
+    else:
+        print(f"색인 중... (Chroma: {PERSIST_DIR})")
+        n = index_documents(vectorstore=vectorstore, docs=documents)
+        print(f"색인 완료: {n}건\n")
 
     # 색인이 쓸 만한지 바로 확인한다. LLM 을 끄고 하이브리드 검색만 본다.
     retriever = build_retriever(docs=documents, llm=None,
