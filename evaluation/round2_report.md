@@ -1,6 +1,6 @@
 # 2차 자체 평가 리포트
 
-- 실행 시각: 2026-09-17 09:37
+- 실행 시각: 2026-09-18 08:51
 - 판정: `expected_tools` 기계 대조 + `expected_traits` / `forbidden` LLM-as-Judge
 - 시각 고정: 20시 · 케이스마다 thread_id·Store 분리
 
