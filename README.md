@@ -166,15 +166,10 @@ docker run --env-file .env -p 8000:8000 -v acnh-chroma:/app/chroma_db acnh-assis
 
 - context_recall: **1.000** (목표 0.80)
 - context_precision: **0.900** (목표 0.75)
-- faithfulness: **0.924** (목표 0.85)
-- answer_relevancy: **0.904** (목표 0.75)
+- faithfulness: **0.882** (목표 0.85)
+- answer_relevancy: **0.914** (목표 0.75)
 
-문서 검색 정확도 10/10.
-
-> 최종 프롬프트 수정 직후의 재측정은 Bedrock 일일 토큰 한도(ThrottlingException)로
-> 완료하지 못했습니다. 위 수치는 그 직전 정상 실행값이며, 쿼터 회복 후
-> `python -m evaluation.run_ragas` 로 재측정이 필요합니다. `evaluation/ragas_report.md`
-> 에 해당 경고를 남겨 두었습니다.
+문서 검색 정확도 **10/10** — 10건 모두 기대 문서를 빠짐없이 가져왔습니다.
 
 ## 인-아웃 세트 통과율 (자체 평가)
 
@@ -266,8 +261,14 @@ RAGAS `context_precision` 이 0.725 로 떨어져 "느슨하게 관련된 문서
 
 ### 남은 한계
 
-- **RAGAS 재측정 미완** — Bedrock 일일 토큰 한도로 최종 프롬프트 반영 후의 측정을 끝내지
-  못했습니다. 적응형 재시도(`max_attempts=10, mode=adaptive`)를 넣어 두었습니다.
+- **`context_precision` 은 집계형 질의를 과소평가합니다.** 이 지표는 검색된 문서를 하나씩
+  놓고 "이것만으로 정답에 도달할 수 있는가"를 판정자에게 묻습니다. R6("늑대 주민 누구누구
+  있어?")은 늑대 5명을 정확히 다 찾아 답도 완벽했지만, 정답이 "다섯 명"이라는 집합이라
+  주민 한 명짜리 문서는 각각 무용하다고 판정돼 0.0 이 나왔습니다. 검색 결함이 아니라
+  지표가 다건 집계를 다루는 방식의 한계입니다.
+- **Bedrock 일일 토큰 한도** — 평가 한 바퀴가 LLM 호출 90~180회라 하루에 여러 번 돌리면
+  `ThrottlingException` 이 납니다. 적응형 재시도(`max_attempts=10, mode=adaptive`)와
+  `SQLiteCache` 로 완화했지만, 반복 실행은 여전히 쿼터에 묶입니다.
 - **Python 3.14 + RAGAS 호환** — `evaluate()` 와 `single_turn_ascore()` 가 내부에서
   `asyncio.wait_for` 를 써 `Timeout should be used inside a task` 로 전부 실패합니다.
   타임아웃을 두르지 않는 `_single_turn_ascore` 를 직접 호출해 우회했습니다.

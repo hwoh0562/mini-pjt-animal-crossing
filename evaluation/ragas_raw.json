@@ -1,7 +1,7 @@
 {
   "scores": {
-    "faithfulness": 0.7311287477954145,
-    "answer_relevancy": 0.8738718472002815,
+    "faithfulness": 0.8820987654320988,
+    "answer_relevancy": 0.9137924085614039,
     "context_precision": 0.89999999991,
     "context_recall": 1.0
   },
@@ -19,14 +19,20 @@
       ],
       "_want": [
         "I-031"
-      ]
+      ],
+      "_scores": {
+        "faithfulness": 0.75,
+        "answer_relevancy": 0.992,
+        "context_precision": 1.0,
+        "context_recall": 1.0
+      }
     },
     {
       "user_input": "납줄개는 어디서 낚을 수 있어?",
       "retrieved_contexts": [
         "납줄개(F-001)는 강에 나타나는 물고기입니다. 그림자 크기는 '가장 작음'입니다. 출현 시간대는 PM 4시 ~ AM 9시입니다. 판매가는 1500벨입니다."
       ],
-      "response": "납줄개는 **강**에서 낚을 수 있습니다. (F-001)\n\n추가 정보:\n- 그림자 크기: 가장 작음\n- 출현 시간대: 오후 4시 ~ 오전 9시\n- 판매가: 1,500벨\n\n지금은 20시이므로 현재 낚을 수 있는 시간대입니다!\n\n출처: F-001",
+      "response": "납줄개는 **강**에서 낚을 수 있습니다. (F-001)\n\n추가 정보:\n- 그림자 크기: 가장 작음\n- 출현 시간대: 오후 4시 ~ 오전 9시\n- 판매가: 1,500벨\n\n출처: F-001",
       "reference": "납줄개는 강에 나타나는 물고기이며 그림자 크기는 가장 작음입니다. 출현 시간대는 PM 4시부터 AM 9시까지이고 판매가는 1500벨입니다.",
       "_id": "R2",
       "_got": [
@@ -34,14 +40,20 @@
       ],
       "_want": [
         "F-001"
-      ]
+      ],
+      "_scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.986,
+        "context_precision": 1.0,
+        "context_recall": 1.0
+      }
     },
     {
       "user_input": "쭈니는 어떤 주민이야?",
       "retrieved_contexts": [
         "쭈니(V-02)는 다람쥐 주민입니다. 성격은 느끼함이고, 생일은 9월 29일, 좋아하는 색은 화이트입니다."
       ],
-      "response": "쭐니는 다람쥐 주민으로, 성격은 느끼함이고 생일은 9월 29일입니다. 좋아하는 색은 화이트예요. **(V-02)**\n\n출처: V-02",
+      "response": "쭈니는 다람쥐 주민으로, 성격은 느끼함이고 생일은 9월 29일입니다. 좋아하는 색은 화이트예요. **(V-02)**\n\n출처: V-02",
       "reference": "쭈니는 다람쥐 주민이며 성격은 느끼함입니다. 생일은 9월 29일이고 좋아하는 색은 화이트입니다.",
       "_id": "R3",
       "_got": [
@@ -49,14 +61,20 @@
       ],
       "_want": [
         "V-02"
-      ]
+      ],
+      "_scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.621,
+        "context_precision": 1.0,
+        "context_recall": 1.0
+      }
     },
     {
       "user_input": "1호는 어떤 주민이야?",
       "retrieved_contexts": [
         "1호(V-16)는 고양이 주민입니다. 성격은 운동광이고, 생일은 8월 1일, 좋아하는 색은 레드입니다."
       ],
-      "response": "**1호**는 **고양이** 주민입니다. (V-16)\n\n- **성격**: 운동광\n- **생일**: 8월 1일\n- **좋아하는 색**: 레드\n\n운동광 성격 주민이라 활발하고 운동을 좋아하는 특징을 가지고 있습니다!\n\n출처: V-16",
+      "response": "**1호**는 **고양이** 주민입니다. (V-16)\n\n- **성격**: 운동광\n- **생일**: 8월 1일\n- **좋아하는 색**: 레드\n\n운동광 성격이라 활발하고 운동을 좋아하는 주민이에요!\n\n출처: V-16",
       "reference": "1호는 고양이 주민이며 성격은 운동광입니다. 생일은 8월 1일이고 좋아하는 색은 레드입니다.",
       "_id": "R4",
       "_got": [
@@ -64,7 +82,13 @@
       ],
       "_want": [
         "V-16"
-      ]
+      ],
+      "_scores": {
+        "faithfulness": 0.667,
+        "answer_relevancy": 0.739,
+        "context_precision": 1.0,
+        "context_recall": 1.0
+      }
     },
     {
       "user_input": "아폴로는 무슨 종족이고 성격이 뭐야?",
@@ -79,7 +103,13 @@
       ],
       "_want": [
         "V-20"
-      ]
+      ],
+      "_scores": {
+        "faithfulness": 0.8,
+        "answer_relevancy": 0.974,
+        "context_precision": 1.0,
+        "context_recall": 1.0
+      }
     },
     {
       "user_input": "늑대 주민 누구누구 있어?",
@@ -106,7 +136,13 @@
         "V-14",
         "V-17",
         "V-18"
-      ]
+      ],
+      "_scores": {
+        "faithfulness": "실패(OutputParserException)",
+        "answer_relevancy": 0.94,
+        "context_precision": 0.0,
+        "context_recall": 1.0
+      }
     },
     {
       "user_input": "9월에 생일인 주민 있어?",
@@ -115,7 +151,7 @@
         "애플(V-04) · 햄스터 · 아이돌 · 9월 24일 · 레드",
         "비앙카(V-07) · 늑대 · 성숙함 · 9월 17일 · 블루"
       ],
-      "response": "네, 9월에 생일인 주민은 총 3명 있습니다!\n\n1. **쭈니** (9월 29일) - 다람쥐, 느끼함 성격, 좋아하는 색: 화이트 (V-02)\n2. **애플** (9월 24일) - 햄스터, 아이돌 성격, 좋아하는 색: 레드 (V-04)\n3. **비앙카** (9월 17일) - 늑대, 성숙함 성격, 좋아하는 색: 블루 (V-07)\n\n생일 선물 준비하실 때 참고하세요!\n\n출처: V-02 · V-04 · V-07",
+      "response": "네, 9월에 생일인 주민은 총 3명 있습니다!\n\n1. **쭈니** (9월 29일) - 다람쥐, 느끼함 성격, 좋아하는 색: 화이트 (V-02)\n2. **애플** (9월 24일) - 햄스터, 아이돌 성격, 좋아하는 색: 레드 (V-04)\n3. **비앙카** (9월 17일) - 늑대, 성숙함 성격, 좋아하는 색: 블루 (V-07)\n\n생일 선물을 준비하시려면 각 주민의 성격에 맞는 선물을 고르시면 좋습니다!\n\n출처: V-02 · V-04 · V-07",
       "reference": "9월에 생일인 주민은 비앙카 9월 17일 애플 9월 24일 쭈니 9월 29일 세 명입니다.",
       "_id": "R7",
       "_got": [
@@ -127,7 +163,13 @@
         "V-04",
         "V-07",
         "V-02"
-      ]
+      ],
+      "_scores": {
+        "faithfulness": 0.944,
+        "answer_relevancy": 0.937,
+        "context_precision": 1.0,
+        "context_recall": 1.0
+      }
     },
     {
       "user_input": "무뚝뚝 성격 주민은 어떤 선물을 좋아해?",
@@ -144,7 +186,13 @@
       ],
       "_want": [
         "P-05"
-      ]
+      ],
+      "_scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.966,
+        "context_precision": 1.0,
+        "context_recall": 1.0
+      }
     },
     {
       "user_input": "먹보 성격 주민한테 주면 안 되는 선물은?",
@@ -159,7 +207,13 @@
       ],
       "_want": [
         "P-06"
-      ]
+      ],
+      "_scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.986,
+        "context_precision": 1.0,
+        "context_recall": 1.0
+      }
     },
     {
       "user_input": "주민에게 선물할 때 반응을 더 좋게 하는 방법이 있어?",
@@ -174,7 +228,13 @@
       ],
       "_want": [
         "P-00"
-      ]
+      ],
+      "_scores": {
+        "faithfulness": 0.778,
+        "answer_relevancy": 0.996,
+        "context_precision": 1.0,
+        "context_recall": 1.0
+      }
     }
   ]
 }

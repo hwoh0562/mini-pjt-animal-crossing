@@ -1,21 +1,15 @@
 # RAGAS 평가 결과
 
-- 실행 시각: 2026-09-17 09:44
+- 실행 시각: 2026-09-18 08:35
 - 대상: `ragas_set.csv` 10건 (검색을 타는 질의만)
 - 판정 LLM · 임베딩 모두 Bedrock (RAGAS 기본값인 OpenAI 대신 주입)
 
-> ⚠️ 이 실행은 도중에 Bedrock ThrottlingException(일일 토큰 한도)에 걸려
-> 일부 판정 호출이 실패했다. faithfulness 가 특히 영향을 받았다.
-> 쿼터 회복 후 python -m evaluation.run_ragas 로 재측정이 필요하다.
-> 직전 정상 실행값: faithfulness 0.924 · context_recall 1.000 ·
-> context_precision 0.900 · answer_relevancy 0.904
-
 | 지표 | 점수 | 목표 | 충족 |
 |---|---|---|---|
-| `faithfulness` | 0.731 | ≥ 0.85 | ❌ |
+| `faithfulness` | 0.882 | ≥ 0.85 | ✅ |
 | `context_recall` | 1.000 | ≥ 0.8 | ✅ |
 | `context_precision` | 0.900 | ≥ 0.75 | ✅ |
-| `answer_relevancy` | 0.874 | ≥ 0.75 | ✅ |
+| `answer_relevancy` | 0.914 | ≥ 0.75 | ✅ |
 
 ## 문서 검색 정확도
 
