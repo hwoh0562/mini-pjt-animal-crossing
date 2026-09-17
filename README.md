@@ -95,12 +95,31 @@ cp .env.example .env    # AWS 키와 BEDROCK_MODEL_ID 를 채운다
 python data/make_data.py
 python -m src.retriever
 
-# 4. API 서버
+# 4. 터미널에서 대화로 확인
+python -m src.chat
+
+# 5. API 서버
 uvicorn src.api:app --reload --port 8000
 
-# 5. 평가
+# 6. 평가
 python -m evaluation.run_eval --round 2
 python -m evaluation.run_ragas
+```
+
+대화형 CLI는 한 세션 안에서 대화가 이어지므로 멀티턴과 승인 흐름을 그대로 확인할 수
+있습니다. 답변과 함께 근거 문서·trace 단계가 같이 출력됩니다.
+
+```
+질문> 쭈니한테 무슨 선물 주면 좋아?
+쭈니는 느끼함 성격의 다람쥐 주민입니다(V-02)...
+
+  근거  V-02 · P-01
+  단계  guardrail_in → retrieve → generate → guardrail_out
+
+질문> 무 지금 148벨인데 전부 팔아줘
+무 120개를 개당 148벨에 매도하면 17,760벨을 받습니다. 진행할까요?
+
+승인(응/취소)> 응
 ```
 
 ```bash

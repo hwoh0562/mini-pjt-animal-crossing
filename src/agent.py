@@ -32,6 +32,7 @@ agent 노드와 generate 노드를 나눈 이유
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime
 
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
@@ -95,6 +96,27 @@ GENERATE_PROMPT = """이번에 답해야 할 질문은 다음 한 건이다. 앞
 # 도구 이름 → trace step. retrieve_docs 만 'retrieve', 나머지는 'tool'.
 # step 이름은 SERVICE.md 에서 6개로 고정했으므로 새로 만들지 않는다.
 _RETRIEVE_TOOLS = {"retrieve_docs"}
+
+
+def _parse_plain(text: str) -> Answer:
+    """구조화 출력이 실패했을 때의 평문 응답을 Answer 로 만든다.
+
+    이 경로에서 모델이 ```json { "answer_text": ... } ``` 형태를 그대로 뱉는 일이
+    있다(실제로 겪음). 그걸 답변으로 내보내면 사용자에게 원시 JSON 이 보인다.
+    JSON 이면 벗겨내고, 아니면 평문 그대로 쓴다.
+    """
+    stripped = text.strip()
+    match = re.search(r"\{.*\}", stripped, re.S)
+    if match:
+        try:
+            parsed = json.loads(match.group(0))
+            if isinstance(parsed, dict) and parsed.get("answer_text"):
+                cited = parsed.get("cited_doc_ids") or []
+                return Answer(answer_text=str(parsed["answer_text"]),
+                              cited_doc_ids=[str(c) for c in cited])
+        except (ValueError, TypeError):
+            pass
+    return Answer(answer_text=stripped, cited_doc_ids=[])
 
 
 def _summarize(value, limit: int = 300) -> str:
@@ -208,10 +230,9 @@ def build_graph(llm=None, tools=None, store=None, checkpointer=None, now_hour: i
         except Exception:
             # 구조화 출력이 실패해도 답변 자체는 내보낸다. 평가에서 한 케이스가
             # 예외로 통째로 날아가는 것보다, 인용 없이라도 답하는 편이 낫다.
-            # 출처가 비므로 출력 가드레일이 이 답변을 걸러낼 수 있다.
             plain = model.invoke(messages)
-            answer = Answer(answer_text=plain.content if isinstance(plain.content, str)
-                            else str(plain.content), cited_doc_ids=[])
+            text = plain.content if isinstance(plain.content, str) else str(plain.content)
+            answer = _parse_plain(text)
         cited = ", ".join(answer.cited_doc_ids) or "(없음)"
         return {
             "answer": answer.answer_text,
@@ -325,8 +346,14 @@ def _interrupt_response(state: dict) -> QueryResponse | None:
 
 
 def is_awaiting_approval(graph, config: dict) -> bool:
-    """이 대화가 승인 대기 상태로 멈춰 있는가."""
-    return bool(graph.get_state(config).next)
+    """이 대화가 승인 대기 상태로 멈춰 있는가.
+
+    `next` 가 비어 있는지로 판단하면 안 된다. 그래프가 예외로 중간에 죽어도
+    `next` 는 남아 있어서, 토큰 한도 등으로 한 번 실패한 뒤의 질문을 승인
+    응답으로 오해한다(실제로 겪음). 실제 interrupt 가 걸려 있는지를 본다.
+    """
+    snapshot = graph.get_state(config)
+    return bool(getattr(snapshot, "interrupts", None))
 
 
 def ask(graph, question: str, config: dict | None = None) -> QueryResponse:

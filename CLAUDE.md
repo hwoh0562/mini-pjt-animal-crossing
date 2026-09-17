@@ -72,7 +72,8 @@ mini-pjt/
 │   ├── retriever.py            # 4. RAG — 쿼리 확장 → 하이브리드 → 리랭킹 + 재시도
 │   ├── tools.py                # 5. 도메인 도구 6개 · build_tools(llm, retriever, store)
 │   ├── agent.py                # 6. LangGraph 그래프 · build_graph(...)
-│   └── api.py                  # 7. FastAPI · POST /query (승인 2턴 분기)
+│   ├── api.py                  # 7. FastAPI · POST /query (승인 2턴 분기)
+│   └── chat.py                 #    터미널 대화형 테스트 (python -m src.chat)
 ├── data/
 │   ├── make_data.py            #    더미 데이터 생성 (단일 생성 지점 · seed 42)
 │   ├── insects.json            #    곤충 50종   (doc_id: I-001~I-050)
@@ -101,6 +102,7 @@ mini-pjt/
 ```bash
 python data/make_data.py                   # 더미 데이터 재생성 (시드 고정)
 python -m src.retriever                    # Chroma 색인 128건 + 검색 스모크 테스트
+python -m src.chat                         # 터미널 대화형 테스트 (멀티턴·승인 확인)
 uvicorn src.api:app --reload --port 8000   # API 서버
 python -m evaluation.run_eval --round 2    # 자체 평가 → round2_report.md
 python -m evaluation.run_ragas             # RAGAS → ragas_report.md
