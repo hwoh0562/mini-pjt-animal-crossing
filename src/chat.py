@@ -48,13 +48,19 @@ def main() -> None:
 
     while True:
         waiting = is_awaiting_approval(graph, CONFIG)
+        prompt = "승인(응/취소)> " if waiting else "질문> "
         try:
-            text = input("승인(응/취소)> " if waiting else "질문> ").strip()
+            text = input(prompt).strip()
         except (EOFError, KeyboardInterrupt):
             print()
             break
         if not text:
             break
+        # 파이프로 입력받으면 stdin 이 화면에 반향되지 않아 기록에 질문이 빠진다.
+        # 시연 로그를 파일로 남길 때 대화가 반쪽이 되므로 직접 찍어 준다.
+        # 터미널에서는 이미 보이므로 중복 출력하지 않는다.
+        if not sys.stdin.isatty():
+            print(text)
 
         try:
             if waiting:
